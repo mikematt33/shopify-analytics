@@ -45,16 +45,6 @@ const Auth = () => {
       <div className="auth-card">
         <h2>{isLogin ? "Login" : "Register"}</h2>
 
-        {isLogin && (
-          <div className="demo-info">
-            <p>
-              <strong>Demo Account:</strong>
-            </p>
-            <p>Email: demo@demo.com</p>
-            <p>Password: demo123</p>
-          </div>
-        )}
-
         <form onSubmit={handleSubmit}>
           {!isLogin && (
             <div className="form-group">

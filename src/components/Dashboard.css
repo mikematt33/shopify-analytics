@@ -2,15 +2,22 @@
   padding: 0;
   max-width: 100%;
   margin: 0;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+
+.dashboard-container * {
+  box-sizing: border-box;
 }
 
 .dashboard-header {
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
 }
 
 .dashboard-header h2 {
   color: var(--text-primary);
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
   font-size: 1.8rem;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -22,7 +29,9 @@
   background: var(--overlay-bg);
   padding: 0.5rem;
   border-radius: 12px;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .tabs button {
@@ -35,6 +44,8 @@
   border-radius: 8px;
   transition: all 0.3s ease;
   font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .tabs button:hover {
@@ -66,9 +77,11 @@
 /* Overview Styles */
 .overview-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 2rem;
-  margin-bottom: 3rem;
+  margin-bottom: 2.5rem;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .stat-card {
@@ -81,6 +94,14 @@
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .stat-card {
+    padding: 1.5rem 1rem;
+  }
 }
 
 .stat-card::before {
@@ -143,8 +164,10 @@
 
 .products-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1.5rem;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .product-card {
@@ -153,6 +176,8 @@
   border-radius: 10px;
   box-shadow: var(--card-shadow);
   border: 1px solid var(--border-color);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .product-card h4 {
@@ -192,8 +217,10 @@
 /* Profit Calculator Styles */
 .profit-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1.5rem;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .profit-card {
@@ -202,6 +229,8 @@
   border-radius: 10px;
   box-shadow: var(--card-shadow);
   border: 1px solid var(--border-color);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .cost-input-section {
@@ -331,20 +360,73 @@
 
 @media (max-width: 768px) {
   .tabs {
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 0.5rem;
   }
 
-  .overview-grid {
-    grid-template-columns: 1fr;
+  .tabs button {
+    padding: 0.75rem;
+    font-size: 0.95rem;
+    width: 100%;
+    text-align: center;
+    min-width: auto;
   }
 
+  .overview-grid,
   .products-grid,
-  .profit-grid {
-    grid-template-columns: 1fr;
+  .profit-grid,
+  .analytics-grid {
+    grid-template-columns: 1fr !important;
+    gap: 1rem;
   }
 }
 
-/* Date Filter Styles */
+@media (max-width: 480px) {
+  .overview-grid,
+  .products-grid,
+  .profit-grid,
+  .analytics-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem;
+  }
+
+  .dashboard-container {
+    padding: 0 0.5rem;
+  }
+
+  .tabs {
+    margin-bottom: 1rem;
+    gap: 0.3rem;
+  }
+
+  .dashboard-header {
+    margin-bottom: 1rem;
+  }
+
+  .dashboard-header h2 {
+    font-size: 1.5rem;
+    margin-bottom: 0.75rem;
+  }
+}
+
+@media (max-width: 375px) {
+  .dashboard-container {
+    padding: 0 0.25rem;
+  }
+
+  .stat-card,
+  .product-card,
+  .profit-card {
+    padding: 1.25rem 0.75rem;
+  }
+
+  .overview-grid,
+  .products-grid,
+  .profit-grid {
+    gap: 0.5rem;
+  }
+} /* Date Filter Styles */
 .date-filter-section {
   margin-bottom: 2rem;
   padding: 1.5rem;
@@ -1264,6 +1346,10 @@
 
   .toggle-description {
     max-width: none;
+  }
+
+  .profit-card {
+    padding: 1.5rem;
   }
 }
 

@@ -12,6 +12,21 @@
   background: var(--background-secondary);
 }
 
+@media (max-width: 768px) {
+  .upload-area {
+    padding: 2rem 1.5rem;
+    border-width: 2px;
+  }
+
+  .upload-area h3 {
+    font-size: 1.25rem;
+  }
+
+  .upload-icon {
+    font-size: 3rem;
+  }
+}
+
 .upload-area:hover,
 .upload-area.drag-active {
   border-color: var(--primary-color, #667eea);
