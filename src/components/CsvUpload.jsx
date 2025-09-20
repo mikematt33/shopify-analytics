@@ -6,6 +6,7 @@ const CsvUpload = ({
   onDataLoaded,
   buttonText = "Upload Shopify Orders CSV",
   compact = false,
+  existingData = null,
 }) => {
   const [dragActive, setDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -123,8 +124,18 @@ const CsvUpload = ({
     reader.readAsText(file);
 
     // Helper function to handle Papa Parse results
-    const handleParseResult = (result) => {
+    const handleParseResult = (result, dataHash = null) => {
       setProgress(60); // 60% after parsing complete
+
+      // Check if we've seen this exact data before (basic duplicate detection)
+      if (dataHash) {
+        const lastUploadHash = localStorage.getItem("lastUploadHash");
+        if (lastUploadHash === dataHash) {
+          console.log("🔄 Detected potential duplicate upload of same file");
+          // Still process but show a helpful message later
+        }
+        localStorage.setItem("lastUploadHash", dataHash);
+      }
 
       console.log("🔍 Raw Papa Parse result:", {
         dataLength: result.data.length,
@@ -266,7 +277,7 @@ const CsvUpload = ({
 
       try {
         // Process the parsed data with valid rows
-        const processedData = processShopifyData(validRows);
+        const processedData = processShopifyData(validRows, existingData);
         setProgress(100);
 
         console.log("Processed data:", processedData);
@@ -275,32 +286,52 @@ const CsvUpload = ({
         const orderCount = processedData.orders.length;
 
         if (orderCount === 0 && validRows.length > 0) {
-          setError(
-            `No orders could be parsed from the CSV file. 
-            
-            This usually means the field names don't match what we expect. 
-            
-            Expected field names include:
-            • Order ID: 'Name', 'Order', 'Order Number', 'Order ID', '#', 'Order Name'
-            • Product Name: 'Lineitem name', 'Product Title', 'Title', 'Product Name', 'Item Name', 'Product'
-            • Quantity: 'Lineitem quantity', 'Quantity', 'Qty', 'Item Quantity'
-            • Price: 'Lineitem price', 'Price', 'Unit Price', 'Item Price', 'Line Item Price'
-            
-            Found field names in your CSV: ${
-              validRows.length > 0
-                ? Object.keys(validRows[0]).join(", ")
-                : "None"
-            }
-            
-            Please check the console (F12) for more detailed parsing information.`
-          );
-          return;
+          // Check if the issue is duplicates vs parsing failure
+          if (processedData.summary?.skippedDuplicates > 0) {
+            // All orders were duplicates
+            setSuccess(
+              `All ${processedData.summary.skippedDuplicates} orders in this CSV already exist in your data. No duplicates were added! ✅`
+            );
+            setTimeout(() => {
+              onDataLoaded(processedData);
+              setLoading(false);
+              setProgress(0);
+              setSuccess("");
+            }, 3000);
+            return;
+          } else {
+            // Actually couldn't parse the data
+            setError(
+              `No orders could be parsed from the CSV file. 
+              
+              This usually means the field names don't match what we expect. 
+              
+              Expected field names include:
+              • Order ID: 'Name', 'Order', 'Order Number', 'Order ID', '#', 'Order Name'
+              • Product Name: 'Lineitem name', 'Product Title', 'Title', 'Product Name', 'Item Name', 'Product'
+              • Quantity: 'Lineitem quantity', 'Quantity', 'Qty', 'Item Quantity'
+              • Price: 'Lineitem price', 'Price', 'Unit Price', 'Item Price', 'Line Item Price'
+              
+              Found field names in your CSV: ${
+                validRows.length > 0
+                  ? Object.keys(validRows[0]).join(", ")
+                  : "None"
+              }
+              
+              Please check the console (F12) for more detailed parsing information.`
+            );
+            return;
+          }
         }
 
         // Show success message
-        setSuccess(
-          `Successfully loaded ${orderCount} orders with ${processedData.products.length} unique products!`
-        );
+        let successMessage = `Successfully loaded ${orderCount} orders with ${processedData.products.length} unique products!`;
+
+        if (processedData.summary?.skippedDuplicates > 0) {
+          successMessage += ` (Skipped ${processedData.summary.skippedDuplicates} duplicate orders)`;
+        }
+
+        setSuccess(successMessage);
 
         setTimeout(() => {
           onDataLoaded(processedData);
@@ -349,7 +380,18 @@ const CsvUpload = ({
           });
         },
         complete: (result) => {
-          handleParseResult(result);
+          // Add a simple hash of the parsed data to detect exact duplicates
+          const dataHash = JSON.stringify({
+            orders: result.data.length,
+            firstOrderId: result.data[0]
+              ? Object.values(result.data[0])[0]
+              : null,
+            lastOrderId: result.data[result.data.length - 1]
+              ? Object.values(result.data[result.data.length - 1])[0]
+              : null,
+          });
+
+          handleParseResult(result, dataHash);
         },
         error: (error) => {
           setLoading(false);
@@ -363,12 +405,29 @@ const CsvUpload = ({
     // This is handled in the reader.onload callback above
   };
 
-  const processShopifyData = (data) => {
+  const processShopifyData = (data, existingData) => {
     const orders = {};
     const products = {};
-    const seenEntries = new Set(); // Track duplicates
+
+    // Create a Set of existing order Names (unique IDs) to check against
+    const existingOrderNames = new Set();
+    if (existingData && existingData.orders) {
+      existingData.orders.forEach((order) => {
+        if (order.id) {
+          existingOrderNames.add(order.id);
+        }
+      });
+    }
+
+    console.log(
+      `🔍 Found ${existingOrderNames.size} existing orders to check against:`,
+      Array.from(existingOrderNames).slice(0, 5)
+    );
+
+    const seenEntries = new Set(); // Track duplicates within this upload
     let processedRows = 0;
     let skippedRows = 0;
+    let skippedDuplicates = 0; // Track orders skipped due to existing in data
 
     // Debug: Log available fields in the CSV
     if (data.length > 0) {
@@ -468,6 +527,20 @@ const CsvUpload = ({
         });
       }
 
+      // Check if this order already exists in the stored data
+      if (orderId && existingOrderNames.has(orderId)) {
+        console.log(`🔄 Skipping order ${orderId} - already exists in data`);
+        skippedDuplicates++;
+        return;
+      }
+
+      // Debug the first few order IDs being processed
+      if (processedRows < 3) {
+        console.log(
+          `✅ Processing new order ${orderId} (not in existing ${existingOrderNames.size} orders)`
+        );
+      }
+
       const entryKey = `${orderId}-${productTitle}-${variant}`;
 
       if (seenEntries.has(entryKey)) {
@@ -559,17 +632,30 @@ const CsvUpload = ({
       }
     });
 
-    const ordersList = Object.values(orders);
-    const productsList = Object.values(products).map((product) => ({
-      ...product,
-      originalVariants: Array.from(product.originalVariants), // Convert Set to Array
-    }));
+    const ordersList = Object.values(orders).sort((a, b) => {
+      // Sort by order ID to ensure consistent ordering
+      return a.id.localeCompare(b.id);
+    });
+
+    const productsList = Object.values(products)
+      .map((product) => ({
+        ...product,
+        originalVariants: Array.from(product.originalVariants).sort(), // Convert Set to sorted Array
+        orders: product.orders.sort(), // Sort order IDs for consistency
+      }))
+      .sort((a, b) => {
+        // Sort by product name, then by variant for consistent ordering
+        const nameCompare = a.name.localeCompare(b.name);
+        if (nameCompare !== 0) return nameCompare;
+        return a.variant.localeCompare(b.variant);
+      });
 
     // Provide parsing feedback
     console.log("📊 Parsing results:", {
       totalRowsInCSV: data.length,
       rowsProcessedSuccessfully: processedRows,
       rowsSkipped: skippedRows,
+      duplicatesSkippedFromExisting: skippedDuplicates,
       totalOrdersParsed: ordersList.length,
       totalProductsParsed: productsList.length,
       duplicatesSkipped: seenEntries.size - processedRows,
@@ -577,19 +663,26 @@ const CsvUpload = ({
 
     // If no data was parsed, provide helpful guidance
     if (ordersList.length === 0 && data.length > 0) {
-      console.error(
-        "No orders were successfully parsed. Check these common field names:"
-      );
-      console.error(
-        "Expected fields: Order ID -> 'Name', 'Order', 'Order Number', 'Order ID', '#', 'Order Name'"
-      );
-      console.error(
-        "Product Name -> 'Lineitem name', 'Product Title', 'Title', 'Product Name', 'Item Name', 'Product'"
-      );
-      console.error(
-        "Available fields in your CSV:",
-        data.length > 0 ? Object.keys(data[0]) : "None"
-      );
+      // Check if all orders were skipped as duplicates
+      if (skippedDuplicates > 0) {
+        console.log(
+          `✅ All ${skippedDuplicates} orders from CSV already exist in your data - no duplicates added!`
+        );
+      } else {
+        console.error(
+          "No orders were successfully parsed. Check these common field names:"
+        );
+        console.error(
+          "Expected fields: Order ID -> 'Name', 'Order', 'Order Number', 'Order ID', '#', 'Order Name'"
+        );
+        console.error(
+          "Product Name -> 'Lineitem name', 'Product Title', 'Title', 'Product Name', 'Item Name', 'Product'"
+        );
+        console.error(
+          "Available fields in your CSV:",
+          data.length > 0 ? Object.keys(data[0]) : "None"
+        );
+      }
     }
 
     return {
@@ -603,6 +696,9 @@ const CsvUpload = ({
           (sum, product) => sum + product.totalQuantity,
           0
         ),
+        skippedDuplicates: skippedDuplicates, // Include count of orders skipped due to duplicates
+        processedRows,
+        skippedRows,
       },
     };
   };

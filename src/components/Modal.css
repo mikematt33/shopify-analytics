@@ -1,0 +1,228 @@
+/* Modal Overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+  animation: modal-fade-in 0.2s ease-out;
+}
+
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Modal Container */
+.modal-container {
+  background: var(--card-bg);
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow: hidden;
+  animation: modal-slide-in 0.2s ease-out;
+  border: 1px solid var(--border-color);
+}
+
+@keyframes modal-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.modal-container.warning {
+  border-left: 4px solid var(--warning-color, #ff9800);
+}
+
+.modal-container.danger {
+  border-left: 4px solid var(--error-color, #ff4757);
+}
+
+/* Modal Header */
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 1.5rem 1rem 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.modal-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.modal-icon {
+  font-size: 1.25rem;
+}
+
+.modal-title h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.modal-close-btn {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 0.25rem;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+}
+
+.modal-close-btn:hover {
+  background: var(--overlay-bg);
+  color: var(--text-primary);
+}
+
+/* Modal Content */
+.modal-content {
+  padding: 1.5rem;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.modal-message {
+  color: var(--text-primary);
+  line-height: 1.6;
+  margin: 0;
+  font-size: 0.95rem;
+  white-space: pre-line;
+}
+
+/* Modal Footer */
+.modal-footer {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  padding: 1rem 1.5rem 1.5rem 1.5rem;
+  border-top: 1px solid var(--border-color);
+  background: var(--input-bg);
+}
+
+/* Modal Buttons */
+.modal-btn {
+  padding: 0.65rem 1.25rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 80px;
+}
+
+.modal-btn-cancel {
+  background: var(--overlay-bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.modal-btn-cancel:hover {
+  background: var(--card-bg);
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}
+
+.modal-btn-confirm {
+  background: var(--primary-color, #667eea);
+  color: white;
+}
+
+.modal-btn-confirm:hover {
+  background: var(--primary-color-dark, #5a67d8);
+  transform: translateY(-1px);
+}
+
+.modal-btn-confirm.warning {
+  background: var(--warning-color, #ff9800);
+}
+
+.modal-btn-confirm.warning:hover {
+  background: #f57c00;
+}
+
+.modal-btn-confirm.danger {
+  background: var(--error-color, #ff4757);
+}
+
+.modal-btn-confirm.danger:hover {
+  background: #ff3838;
+}
+
+/* Mobile Responsive */
+@media (max-width: 600px) {
+  .modal-overlay {
+    padding: 0.5rem;
+  }
+
+  .modal-container {
+    max-width: 100%;
+    margin: 0;
+    border-radius: 8px;
+  }
+
+  .modal-header {
+    padding: 1rem 1rem 0.75rem 1rem;
+  }
+
+  .modal-content {
+    padding: 1rem;
+  }
+
+  .modal-footer {
+    padding: 0.75rem 1rem 1rem 1rem;
+    flex-direction: column;
+  }
+
+  .modal-btn {
+    width: 100%;
+    order: 2;
+  }
+
+  .modal-btn-cancel {
+    order: 1;
+  }
+}
+
+/* Focus management */
+.modal-btn:focus {
+  outline: 2px solid var(--primary-color, #667eea);
+  outline-offset: 2px;
+}
+
+/* Dark mode compatibility */
+@media (prefers-color-scheme: dark) {
+  .modal-overlay {
+    background: rgba(0, 0, 0, 0.8);
+  }
+}

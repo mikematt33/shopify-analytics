@@ -1,9 +1,9 @@
 {
-  "name": "xponline-inv-system",
+  "name": "shopify-analytics",
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://mikematt33.github.io/xponline-inv-system",
+  "homepage": "https://mikematt33.github.io/shopify-analytics",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

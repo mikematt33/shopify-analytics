@@ -5,6 +5,7 @@ import { useAuth } from "./hooks/useAuth";
 import Auth from "./components/Auth";
 import Dashboard from "./components/Dashboard";
 import CsvUpload from "./components/CsvUpload";
+import Modal from "./components/Modal";
 import "./App.css";
 
 const AppContent = () => {
@@ -17,6 +18,21 @@ const AppContent = () => {
     const saved = localStorage.getItem("darkMode");
     return saved ? JSON.parse(saved) : true; // Default to dark mode
   });
+
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [clearModalStep, setClearModalStep] = useState(1); // 1: first confirmation, 2: final confirmation
+  const [lastUploadStats, setLastUploadStats] = useState(null); // Track last upload statistics
+
+  // Auto-hide upload stats after 25 seconds
+  useEffect(() => {
+    if (lastUploadStats) {
+      const timer = setTimeout(() => {
+        setLastUploadStats(null);
+      }, 25000); // 25 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [lastUploadStats]);
 
   // Apply dark mode to document
   useEffect(() => {
@@ -31,6 +47,17 @@ const AppContent = () => {
   };
 
   const handleDataLoaded = (newData, shouldMerge = false) => {
+    // Capture upload statistics before processing
+    if (newData.summary) {
+      setLastUploadStats({
+        totalProcessed: newData.orders.length,
+        skippedDuplicates: newData.summary.skippedDuplicates || 0,
+        totalAttempted:
+          newData.orders.length + (newData.summary.skippedDuplicates || 0),
+        isMerge: shouldMerge,
+      });
+    }
+
     if (shouldMerge && orderData) {
       const mergedData = mergeOrderData(orderData, newData);
       setOrderData(mergedData);
@@ -120,22 +147,29 @@ const AppContent = () => {
   };
 
   const handleRemoveAllData = () => {
-    const confirmed = window.confirm(
-      "⚠️ Are you sure you want to remove ALL data?\n\nThis will permanently delete:\n• All order data\n• All product information\n• All cost settings\n• All analytics data\n\nThis action cannot be undone. Consider exporting your data first."
-    );
+    setShowClearModal(true);
+    setClearModalStep(1);
+  };
 
-    if (confirmed) {
-      const doubleConfirmed = window.confirm(
-        "🚨 FINAL CONFIRMATION\n\nThis will completely wipe all your data and settings. Are you absolutely sure?"
-      );
-
-      if (doubleConfirmed) {
-        setOrderData(null);
-        localStorage.removeItem("shopifyOrderData");
-        localStorage.removeItem("costSettings");
-        alert("✅ All data has been removed successfully.");
-      }
+  const handleClearModalConfirm = () => {
+    if (clearModalStep === 1) {
+      // First confirmation - go to final confirmation
+      setClearModalStep(2);
+    } else {
+      // Final confirmation - actually clear the data
+      setOrderData(null);
+      localStorage.removeItem("shopifyOrderData");
+      localStorage.removeItem("costSettings");
+      localStorage.removeItem("sizeCostingEnabled");
+      localStorage.removeItem("sizeOverrides");
+      setShowClearModal(false);
+      setClearModalStep(1);
     }
+  };
+
+  const handleClearModalCancel = () => {
+    setShowClearModal(false);
+    setClearModalStep(1);
   };
 
   const handleImportBackup = (event) => {
@@ -221,7 +255,10 @@ const AppContent = () => {
       <main className="app-main">
         {!orderData ? (
           <div className="upload-section">
-            <CsvUpload onDataLoaded={(data) => handleDataLoaded(data, false)} />
+            <CsvUpload
+              onDataLoaded={(data) => handleDataLoaded(data, false)}
+              existingData={orderData}
+            />
 
             <div className="import-section">
               <h3>Or Import from Backup</h3>
@@ -275,7 +312,41 @@ const AppContent = () => {
                   onDataLoaded={(data) => handleDataLoaded(data, true)}
                   buttonText="➕ Add More Data"
                   compact={true}
+                  existingData={orderData}
                 />
+                {lastUploadStats && lastUploadStats.isMerge && (
+                  <div className="upload-stats">
+                    <div className="stats-content">
+                      {lastUploadStats.skippedDuplicates > 0 ? (
+                        <div className="duplicate-info">
+                          <span className="stats-icon">🔄</span>
+                          <span className="stats-text">
+                            Processed {lastUploadStats.totalProcessed} new
+                            orders, skipped {lastUploadStats.skippedDuplicates}{" "}
+                            duplicates (out of {lastUploadStats.totalAttempted}{" "}
+                            total)
+                          </span>
+                        </div>
+                      ) : lastUploadStats.totalProcessed > 0 ? (
+                        <div className="success-info">
+                          <span className="stats-icon">✅</span>
+                          <span className="stats-text">
+                            Successfully added {lastUploadStats.totalProcessed}{" "}
+                            new orders
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="no-new-info">
+                          <span className="stats-icon">ℹ️</span>
+                          <span className="stats-text">
+                            All {lastUploadStats.skippedDuplicates} orders
+                            already exist - no duplicates added
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <Dashboard data={orderData} />
@@ -289,6 +360,24 @@ const AppContent = () => {
           profit tracking.
         </p>
       </footer>
+
+      {/* Clear Data Modal */}
+      <Modal
+        isOpen={showClearModal}
+        onClose={handleClearModalCancel}
+        onConfirm={handleClearModalConfirm}
+        type={clearModalStep === 1 ? "warning" : "danger"}
+        title={clearModalStep === 1 ? "Remove All Data?" : "Final Confirmation"}
+        confirmText={
+          clearModalStep === 1 ? "Yes, Continue" : "Yes, Delete Everything"
+        }
+        cancelText={clearModalStep === 1 ? "Cancel" : "No, Keep Data"}
+        message={
+          clearModalStep === 1
+            ? "Are you sure you want to remove ALL data?\n\nThis will permanently delete:\n• All order data\n• All product information\n• All cost settings\n• All analytics data\n\nThis action cannot be undone. Consider exporting your data first."
+            : "This will completely wipe all your data and settings. Are you absolutely sure?\n\nThis action is IRREVERSIBLE!"
+        }
+      />
     </div>
   );
 };

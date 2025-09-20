@@ -1,7 +1,109 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Pagination from "./Pagination";
 import usePagination from "../hooks/usePagination";
 import "./Dashboard.css";
+
+// Component for handling size-specific cost overrides in unified mode
+const SizeOverrideSection = ({
+  productName,
+  originalVariants,
+  sizeOverrides,
+  updateSizeOverride,
+  removeSizeOverride,
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const productOverrides = sizeOverrides[productName] || {};
+  const hasOverrides = Object.keys(productOverrides).length > 0;
+
+  const extractSizeFromVariant = (variantName) => {
+    // Extract just the size part from variants like "T-shirt - Large" or "Large"
+    const parts = variantName.split(" - ");
+    return parts.length > 1 ? parts[parts.length - 1] : variantName;
+  };
+
+  return (
+    <div className="size-override-section">
+      <button
+        className={`size-override-toggle ${
+          hasOverrides ? "has-overrides" : ""
+        }`}
+        onClick={() => setIsExpanded(!isExpanded)}
+        type="button"
+      >
+        <span className="toggle-text">
+          Individual Size Pricing{" "}
+          {hasOverrides &&
+            `(${Object.keys(productOverrides).length} overrides)`}
+        </span>
+        <span className={`toggle-arrow ${isExpanded ? "expanded" : ""}`}>
+          ▼
+        </span>
+      </button>
+
+      {isExpanded && (
+        <div className="size-overrides-list">
+          <p className="size-override-help">
+            Set custom costs for specific sizes. Leave blank to use the unified
+            price above.
+          </p>
+          {originalVariants.map((variant, index) => {
+            const sizeDisplay = extractSizeFromVariant(variant);
+            const currentOverride = productOverrides[variant] || "";
+
+            return (
+              <div key={index} className="size-override-item">
+                <label className="size-label">{sizeDisplay}:</label>
+                <div className="size-input-group">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="Use unified price"
+                    value={currentOverride}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === "" || value === "0") {
+                        removeSizeOverride(productName, variant);
+                      } else {
+                        updateSizeOverride(productName, variant, value);
+                      }
+                    }}
+                    className="size-cost-input"
+                  />
+                  {currentOverride && (
+                    <button
+                      type="button"
+                      className="clear-override-btn"
+                      onClick={() => removeSizeOverride(productName, variant)}
+                      title="Clear override"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {hasOverrides && (
+            <button
+              type="button"
+              className="clear-all-overrides-btn"
+              onClick={() => {
+                originalVariants.forEach((variant) => {
+                  removeSizeOverride(productName, variant);
+                });
+              }}
+            >
+              Clear All Overrides
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const Dashboard = ({ data }) => {
   const [activeTab, setActiveTab] = useState("overview");
@@ -35,6 +137,12 @@ const Dashboard = ({ data }) => {
     return saved ? JSON.parse(saved) : false;
   });
 
+  // State for individual size overrides when in unified mode
+  const [sizeOverrides, setSizeOverrides] = useState(() => {
+    const saved = localStorage.getItem("sizeOverrides");
+    return saved ? JSON.parse(saved) : {};
+  });
+
   // Pagination states - will be initialized when data is processed
   const [processedProducts, setProcessedProducts] = useState([]);
   const [processedOrders, setProcessedOrders] = useState([]);
@@ -57,6 +165,10 @@ const Dashboard = ({ data }) => {
     );
   }, [sizeCostingEnabled]);
 
+  useEffect(() => {
+    localStorage.setItem("sizeOverrides", JSON.stringify(sizeOverrides));
+  }, [sizeOverrides]);
+
   const updateProductCost = (productName, cost) => {
     setCostSettings((prev) => ({
       ...prev,
@@ -64,92 +176,28 @@ const Dashboard = ({ data }) => {
     }));
   };
 
-  const matchesPattern = (productName, pattern) => {
-    if (!pattern) return false;
-
-    // Convert wildcard pattern to regex
-    const regexPattern = pattern
-      .toLowerCase()
-      .replace(/\*/g, ".*")
-      .replace(/\?/g, ".");
-
-    const regex = new RegExp(`^${regexPattern}$`, "i");
-    return regex.test(productName.toLowerCase());
+  const updateSizeOverride = (productName, sizeName, cost) => {
+    setSizeOverrides((prev) => ({
+      ...prev,
+      [productName]: {
+        ...prev[productName],
+        [sizeName]: parseFloat(cost) || 0,
+      },
+    }));
   };
 
-  const getMatchingProducts = (pattern) => {
-    if (!pattern || !data?.products) return [];
-    return data.products.filter((product) =>
-      matchesPattern(product.name, pattern)
-    );
-  };
-
-  const handlePreviewMatches = () => {
-    const pattern = document.getElementById("bulkPattern").value;
-    const matchingProducts = getMatchingProducts(pattern);
-    const previewDiv = document.getElementById("matchPreview");
-
-    if (matchingProducts.length === 0) {
-      previewDiv.innerHTML = `<p class="no-matches">No products match the pattern "${pattern}"</p>`;
-    } else {
-      previewDiv.innerHTML = `
-        <div class="match-results">
-          <h5>Matching Products (${matchingProducts.length}):</h5>
-          <ul>
-            ${matchingProducts
-              .map((product) => `<li>${product.name} - ${product.variant}</li>`)
-              .join("")}
-          </ul>
-        </div>
-      `;
-    }
-  };
-
-  const handleBulkCostUpdate = () => {
-    const pattern = document.getElementById("bulkPattern").value;
-    const cost = parseFloat(document.getElementById("bulkCost").value);
-
-    if (!pattern) {
-      alert("Please enter a product name pattern");
-      return;
-    }
-
-    if (isNaN(cost) || cost < 0) {
-      alert("Please enter a valid cost");
-      return;
-    }
-
-    const matchingProducts = getMatchingProducts(pattern);
-
-    if (matchingProducts.length === 0) {
-      alert(`No products match the pattern "${pattern}"`);
-      return;
-    }
-
-    const confirmed = confirm(
-      `Set cost to $${cost.toFixed(2)} for ${
-        matchingProducts.length
-      } matching products?`
-    );
-
-    if (confirmed) {
-      setCostSettings((prev) => {
-        const newSettings = { ...prev };
-        matchingProducts.forEach((product) => {
-          newSettings[product.name] = cost;
-        });
-        return newSettings;
-      });
-
-      // Clear form and preview
-      document.getElementById("bulkPattern").value = "";
-      document.getElementById("bulkCost").value = "";
-      document.getElementById("matchPreview").innerHTML = "";
-
-      alert(
-        `Successfully updated costs for ${matchingProducts.length} products!`
-      );
-    }
+  const removeSizeOverride = (productName, sizeName) => {
+    setSizeOverrides((prev) => {
+      const newOverrides = { ...prev };
+      if (newOverrides[productName]) {
+        delete newOverrides[productName][sizeName];
+        // Remove the product entry if no overrides left
+        if (Object.keys(newOverrides[productName]).length === 0) {
+          delete newOverrides[productName];
+        }
+      }
+      return newOverrides;
+    });
   };
 
   const calculateProfits = (dataToUse = data) => {
@@ -158,14 +206,51 @@ const Dashboard = ({ data }) => {
 
     let totalProfit = 0;
     const profitByProduct = dataToUse.products.map((product) => {
-      const cost = costSettings[product.name] || 0;
-      const profit = product.totalRevenue - cost * product.totalQuantity;
+      let cost, totalCost;
+
+      if (sizeCostingEnabled) {
+        // Individual size pricing mode - use existing logic
+        cost = costSettings[product.name] || 0;
+        totalCost = cost * product.totalQuantity;
+      } else {
+        // Unified pricing mode - check for size overrides
+        const baseProductName = product.name;
+        const baseCost = costSettings[baseProductName] || 0;
+        const productOverrides = sizeOverrides[baseProductName] || {};
+
+        if (
+          product.originalVariants &&
+          product.originalVariants.length > 1 &&
+          Object.keys(productOverrides).length > 0
+        ) {
+          // Calculate weighted cost based on overrides and unified pricing
+          totalCost = 0;
+          const avgQuantityPerVariant =
+            product.totalQuantity / product.originalVariants.length;
+
+          product.originalVariants.forEach((variant) => {
+            const variantCost =
+              productOverrides[variant] !== undefined
+                ? productOverrides[variant]
+                : baseCost;
+            totalCost += variantCost * avgQuantityPerVariant;
+          });
+
+          cost = totalCost / product.totalQuantity; // Average cost per unit
+        } else {
+          // No overrides, use unified pricing
+          cost = baseCost;
+          totalCost = cost * product.totalQuantity;
+        }
+      }
+
+      const profit = product.totalRevenue - totalCost;
       totalProfit += profit;
 
       return {
         ...product,
         cost: cost,
-        totalCost: cost * product.totalQuantity,
+        totalCost: totalCost,
         profit: profit,
         profitMargin:
           product.totalRevenue > 0 ? (profit / product.totalRevenue) * 100 : 0,
@@ -841,6 +926,13 @@ const Dashboard = ({ data }) => {
           <h3>Profit Calculator</h3>
 
           <div className="costing-mode-toggle">
+            <div className="toggle-header">
+              <h4>📏 Size Pricing Mode</h4>
+              <p className="toggle-info">
+                Choose how to handle different product sizes
+              </p>
+            </div>
+
             <label className="toggle-label">
               <input
                 type="checkbox"
@@ -849,17 +941,19 @@ const Dashboard = ({ data }) => {
                 className="toggle-checkbox"
               />
               <span className="toggle-slider"></span>
-              <span className="toggle-text">
-                {sizeCostingEnabled
-                  ? "Individual Size Pricing"
-                  : "Unified Size Pricing"}
-              </span>
+              <div className="toggle-content">
+                <span className="toggle-text">
+                  {sizeCostingEnabled
+                    ? "Individual Size Pricing"
+                    : "Unified Size Pricing"}
+                </span>
+                <p className="toggle-description">
+                  {sizeCostingEnabled
+                    ? "Set different costs for each size variant (e.g., Small $5, Large $8). Perfect when your costs vary by size."
+                    : "Use the same cost for all sizes of each product (recommended). Simpler and works for most scenarios."}
+                </p>
+              </div>
             </label>
-            <p className="toggle-description">
-              {sizeCostingEnabled
-                ? "Set different costs for each size variant (e.g., Small vs Large)"
-                : "Use same cost for all sizes of the same product (recommended)"}
-            </p>
           </div>
         </div>
 
@@ -869,51 +963,6 @@ const Dashboard = ({ data }) => {
           {!sizeCostingEnabled &&
             " Costs will apply to all sizes of each product."}
         </p>
-
-        {/* Bulk Actions Section */}
-        <div className="bulk-actions">
-          <h4>🚀 Quick Bulk Cost Setting</h4>
-          <div className="bulk-form">
-            <div className="bulk-input-group">
-              <label>Product Name Pattern:</label>
-              <input
-                type="text"
-                placeholder="e.g., T-shirt, Hoodie, *Medium*"
-                id="bulkPattern"
-                className="pattern-input"
-              />
-              <span className="help-text">
-                Use * for wildcards (e.g., *shirt* matches T-shirt, Long-sleeve
-                shirt)
-              </span>
-            </div>
-            <div className="bulk-input-group">
-              <label>Cost per unit ($):</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                id="bulkCost"
-                className="cost-input"
-              />
-            </div>
-            <div className="bulk-actions-buttons">
-              <button onClick={handleBulkCostUpdate} className="bulk-apply-btn">
-                Apply to Matching Products
-              </button>
-              <button
-                onClick={handlePreviewMatches}
-                className="bulk-preview-btn"
-              >
-                Preview Matches
-              </button>
-            </div>
-          </div>
-
-          {/* Preview matches */}
-          <div id="matchPreview" className="match-preview"></div>
-        </div>
 
         <div className="profit-grid">
           {productsForCosting.map((product, index) => {
@@ -953,6 +1002,19 @@ const Dashboard = ({ data }) => {
                     onChange={(e) => updateProductCost(costKey, e.target.value)}
                   />
                 </div>
+
+                {/* Size Override Section - Only show in unified mode when there are multiple variants */}
+                {!sizeCostingEnabled &&
+                  product.originalVariants &&
+                  product.originalVariants.length > 1 && (
+                    <SizeOverrideSection
+                      productName={product.name}
+                      originalVariants={product.originalVariants}
+                      sizeOverrides={sizeOverrides}
+                      updateSizeOverride={updateSizeOverride}
+                      removeSizeOverride={removeSizeOverride}
+                    />
+                  )}
 
                 {profitData && (
                   <div className="profit-details">
