@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useRef } from "react";
 import Pagination from "./Pagination";
 import usePagination from "../hooks/usePagination";
+import { useSettings } from "../hooks/useSettings";
 import "./Dashboard.css";
 
 // Component for handling size-specific cost overrides in unified mode
@@ -107,6 +108,7 @@ const SizeOverrideSection = ({
 
 const Dashboard = ({ data }) => {
   const [activeTab, setActiveTab] = useState("overview");
+  const { settings, updateSetting } = useSettings();
 
   // Refs for scroll targets
   const productsRef = useRef(null);
@@ -117,10 +119,12 @@ const Dashboard = ({ data }) => {
     endDate: "",
     enabled: false,
   });
-  const [costSettings, setCostSettings] = useState(() => {
-    const saved = localStorage.getItem("costSettings");
-    return saved ? JSON.parse(saved) : {};
-  });
+
+  // Use settings from the hook instead of localStorage
+  const costSettings = settings.costSettings;
+  const sizeCostingEnabled = settings.sizeCostingEnabled;
+  const sizeOverrides = settings.sizeOverrides;
+
   const [orderFilters, setOrderFilters] = useState({
     searchTerm: "",
     sortBy: "date",
@@ -132,16 +136,6 @@ const Dashboard = ({ data }) => {
   const [productSortOrder, setProductSortOrder] = useState("desc");
   const [productView, setProductView] = useState("cards");
   const [productCombineMode, setProductCombineMode] = useState("none"); // 'none', 'by-size', 'by-name'
-  const [sizeCostingEnabled, setSizeCostingEnabled] = useState(() => {
-    const saved = localStorage.getItem("sizeCostingEnabled");
-    return saved ? JSON.parse(saved) : false;
-  });
-
-  // State for individual size overrides when in unified mode
-  const [sizeOverrides, setSizeOverrides] = useState(() => {
-    const saved = localStorage.getItem("sizeOverrides");
-    return saved ? JSON.parse(saved) : {};
-  });
 
   // Pagination states - will be initialized when data is processed
   const [processedProducts, setProcessedProducts] = useState([]);
@@ -154,50 +148,39 @@ const Dashboard = ({ data }) => {
   // Debug logging
   console.log("Dashboard received data:", data);
 
-  useEffect(() => {
-    localStorage.setItem("costSettings", JSON.stringify(costSettings));
-  }, [costSettings]);
-
-  useEffect(() => {
-    localStorage.setItem(
-      "sizeCostingEnabled",
-      JSON.stringify(sizeCostingEnabled)
-    );
-  }, [sizeCostingEnabled]);
-
-  useEffect(() => {
-    localStorage.setItem("sizeOverrides", JSON.stringify(sizeOverrides));
-  }, [sizeOverrides]);
-
   const updateProductCost = (productName, cost) => {
-    setCostSettings((prev) => ({
-      ...prev,
+    const newCostSettings = {
+      ...costSettings,
       [productName]: parseFloat(cost) || 0,
-    }));
+    };
+    updateSetting("costSettings", newCostSettings);
   };
 
   const updateSizeOverride = (productName, sizeName, cost) => {
-    setSizeOverrides((prev) => ({
-      ...prev,
+    const newSizeOverrides = {
+      ...sizeOverrides,
       [productName]: {
-        ...prev[productName],
+        ...sizeOverrides[productName],
         [sizeName]: parseFloat(cost) || 0,
       },
-    }));
+    };
+    updateSetting("sizeOverrides", newSizeOverrides);
   };
 
   const removeSizeOverride = (productName, sizeName) => {
-    setSizeOverrides((prev) => {
-      const newOverrides = { ...prev };
-      if (newOverrides[productName]) {
-        delete newOverrides[productName][sizeName];
-        // Remove the product entry if no overrides left
-        if (Object.keys(newOverrides[productName]).length === 0) {
-          delete newOverrides[productName];
-        }
+    const newOverrides = { ...sizeOverrides };
+    if (newOverrides[productName]) {
+      delete newOverrides[productName][sizeName];
+      // Remove the product entry if no overrides left
+      if (Object.keys(newOverrides[productName]).length === 0) {
+        delete newOverrides[productName];
       }
-      return newOverrides;
-    });
+    }
+    updateSetting("sizeOverrides", newOverrides);
+  };
+
+  const toggleSizeCostingEnabled = (enabled) => {
+    updateSetting("sizeCostingEnabled", enabled);
   };
 
   const calculateProfits = (dataToUse = data) => {
@@ -937,7 +920,7 @@ const Dashboard = ({ data }) => {
               <input
                 type="checkbox"
                 checked={sizeCostingEnabled}
-                onChange={(e) => setSizeCostingEnabled(e.target.checked)}
+                onChange={(e) => toggleSizeCostingEnabled(e.target.checked)}
                 className="toggle-checkbox"
               />
               <span className="toggle-slider"></span>

@@ -1,27 +1,56 @@
 import { useState, useEffect } from "react";
 import { BrowserRouter as Router } from "react-router-dom";
-import { AuthProvider } from "./context/AuthContext.jsx";
+import { FirebaseAuthProvider } from "./context/FirebaseAuthContext.jsx";
 import { useAuth } from "./hooks/useAuth";
 import Auth from "./components/Auth";
 import Dashboard from "./components/Dashboard";
 import CsvUpload from "./components/CsvUpload";
 import Modal from "./components/Modal";
+import { orderDataService, settingsService } from "./firebase/services";
 import "./App.css";
 
 const AppContent = () => {
-  const { user, logout, loading } = useAuth();
-  const [orderData, setOrderData] = useState(() => {
-    const saved = localStorage.getItem("shopifyOrderData");
-    return saved ? JSON.parse(saved) : null;
-  });
-  const [darkMode, setDarkMode] = useState(() => {
-    const saved = localStorage.getItem("darkMode");
-    return saved ? JSON.parse(saved) : true; // Default to dark mode
-  });
-
+  const { user, logout, loading, deleteAccount } = useAuth();
+  const [orderData, setOrderData] = useState(null);
+  const [darkMode, setDarkMode] = useState(true); // Default to dark mode
+  const [dataLoading, setDataLoading] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
   const [clearModalStep, setClearModalStep] = useState(1); // 1: first confirmation, 2: final confirmation
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [deleteAccountStep, setDeleteAccountStep] = useState(1); // 1: first confirmation, 2: final confirmation
   const [lastUploadStats, setLastUploadStats] = useState(null); // Track last upload statistics
+
+  // Load user data from Firebase when user logs in
+  useEffect(() => {
+    const loadUserData = async () => {
+      if (user?.id) {
+        setDataLoading(true);
+        try {
+          // Load order data
+          const userData = await orderDataService.getUserOrderData(user.id);
+          if (userData?.orderData) {
+            setOrderData(userData.orderData);
+          }
+
+          // Load settings
+          const userSettings = await settingsService.getUserSettings(user.id);
+          if (userSettings.darkMode !== undefined) {
+            setDarkMode(userSettings.darkMode);
+          }
+        } catch (error) {
+          console.error("Failed to load user data:", error);
+        } finally {
+          setDataLoading(false);
+        }
+      } else {
+        // Clear data when user logs out
+        setOrderData(null);
+        setDarkMode(true);
+      }
+    };
+
+    loadUserData();
+  }, [user?.id]);
 
   // Auto-hide upload stats after 25 seconds
   useEffect(() => {
@@ -34,19 +63,27 @@ const AppContent = () => {
     }
   }, [lastUploadStats]);
 
-  // Apply dark mode to document
+  // Apply dark mode to document and save to Firebase
   useEffect(() => {
     const theme = darkMode ? "dark" : "light";
     document.documentElement.setAttribute("data-theme", theme);
     document.body.setAttribute("data-theme", theme);
-    localStorage.setItem("darkMode", JSON.stringify(darkMode));
-  }, [darkMode]);
+
+    // Save to Firebase if user is logged in
+    if (user?.id) {
+      settingsService
+        .updateSetting(user.id, "darkMode", darkMode)
+        .catch((error) => {
+          console.error("Failed to save dark mode setting:", error);
+        });
+    }
+  }, [darkMode, user?.id]);
 
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
   };
 
-  const handleDataLoaded = (newData, shouldMerge = false) => {
+  const handleDataLoaded = async (newData, shouldMerge = false) => {
     // Capture upload statistics before processing
     if (newData.summary) {
       setLastUploadStats({
@@ -58,13 +95,24 @@ const AppContent = () => {
       });
     }
 
+    let processedData;
     if (shouldMerge && orderData) {
-      const mergedData = mergeOrderData(orderData, newData);
-      setOrderData(mergedData);
-      localStorage.setItem("shopifyOrderData", JSON.stringify(mergedData));
+      processedData = mergeOrderData(orderData, newData);
     } else {
-      setOrderData(newData);
-      localStorage.setItem("shopifyOrderData", JSON.stringify(newData));
+      processedData = newData;
+    }
+
+    setOrderData(processedData);
+
+    // Save to Firebase instead of localStorage
+    if (user?.id) {
+      try {
+        await orderDataService.saveOrderData(user.id, processedData);
+      } catch (error) {
+        console.error("Failed to save data to Firebase:", error);
+        // Fallback to localStorage for now
+        localStorage.setItem("shopifyOrderData", JSON.stringify(processedData));
+      }
     }
   };
 
@@ -117,13 +165,25 @@ const AppContent = () => {
     };
   };
 
-  const handleExportData = () => {
+  const handleExportData = async () => {
     if (!orderData) return;
+
+    let costSettings = {};
+    if (user?.id) {
+      try {
+        const userSettings = await settingsService.getUserSettings(user.id);
+        costSettings = userSettings.costSettings || {};
+      } catch (error) {
+        console.error("Failed to load settings for export:", error);
+        // Fallback to localStorage
+        costSettings = JSON.parse(localStorage.getItem("costSettings") || "{}");
+      }
+    }
 
     const dataToExport = {
       exportDate: new Date().toISOString(),
       data: orderData,
-      costSettings: JSON.parse(localStorage.getItem("costSettings") || "{}"),
+      costSettings: costSettings,
     };
 
     const blob = new Blob([JSON.stringify(dataToExport, null, 2)], {
@@ -141,8 +201,19 @@ const AppContent = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handleClearData = () => {
+  const handleClearData = async () => {
     setOrderData(null);
+
+    // Clear from Firebase
+    if (user?.id) {
+      try {
+        await orderDataService.deleteOrderData(user.id);
+      } catch (error) {
+        console.error("Failed to clear data from Firebase:", error);
+      }
+    }
+
+    // Also clear localStorage as fallback
     localStorage.removeItem("shopifyOrderData");
   };
 
@@ -151,17 +222,31 @@ const AppContent = () => {
     setClearModalStep(1);
   };
 
-  const handleClearModalConfirm = () => {
+  const handleClearModalConfirm = async () => {
     if (clearModalStep === 1) {
       // First confirmation - go to final confirmation
       setClearModalStep(2);
     } else {
-      // Final confirmation - actually clear the data
+      // Final confirmation - actually clear all data
       setOrderData(null);
+
+      // Clear from Firebase
+      if (user?.id) {
+        try {
+          await orderDataService.deleteOrderData(user.id);
+          // Clear all settings too
+          await settingsService.saveUserSettings(user.id, {});
+        } catch (error) {
+          console.error("Failed to clear data from Firebase:", error);
+        }
+      }
+
+      // Also clear localStorage as fallback
       localStorage.removeItem("shopifyOrderData");
       localStorage.removeItem("costSettings");
       localStorage.removeItem("sizeCostingEnabled");
       localStorage.removeItem("sizeOverrides");
+
       setShowClearModal(false);
       setClearModalStep(1);
     }
@@ -172,12 +257,47 @@ const AppContent = () => {
     setClearModalStep(1);
   };
 
-  const handleImportBackup = (event) => {
+  const handleDeleteAccount = () => {
+    setShowDeleteAccountModal(true);
+    setDeleteAccountStep(1);
+  };
+
+  const handleDeleteAccountConfirm = async () => {
+    if (deleteAccountStep === 1) {
+      // First confirmation - go to final confirmation
+      setDeleteAccountStep(2);
+    } else {
+      // Final confirmation - actually delete the account
+      try {
+        const result = await deleteAccount();
+        if (result.success) {
+          // Account deleted successfully, user will be automatically logged out
+          setShowDeleteAccountModal(false);
+          setDeleteAccountStep(1);
+          alert("Your account has been permanently deleted.");
+        } else {
+          alert(`Failed to delete account: ${result.error}`);
+        }
+      } catch (error) {
+        console.error("Account deletion error:", error);
+        alert(
+          "An error occurred while deleting your account. Please try again."
+        );
+      }
+    }
+  };
+
+  const handleDeleteAccountCancel = () => {
+    setShowDeleteAccountModal(false);
+    setDeleteAccountStep(1);
+  };
+
+  const handleImportBackup = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const backupData = JSON.parse(e.target.result);
 
@@ -187,17 +307,34 @@ const AppContent = () => {
           backupData.data.products
         ) {
           setOrderData(backupData.data);
-          localStorage.setItem(
-            "shopifyOrderData",
-            JSON.stringify(backupData.data)
-          );
 
-          // Also restore cost settings if they exist
-          if (backupData.costSettings) {
-            localStorage.setItem(
-              "costSettings",
-              JSON.stringify(backupData.costSettings)
-            );
+          // Save to Firebase
+          if (user?.id) {
+            try {
+              await orderDataService.saveOrderData(user.id, backupData.data);
+
+              // Also restore cost settings if they exist
+              if (backupData.costSettings) {
+                await settingsService.updateSetting(
+                  user.id,
+                  "costSettings",
+                  backupData.costSettings
+                );
+              }
+            } catch (error) {
+              console.error("Failed to save imported data to Firebase:", error);
+              // Fallback to localStorage
+              localStorage.setItem(
+                "shopifyOrderData",
+                JSON.stringify(backupData.data)
+              );
+              if (backupData.costSettings) {
+                localStorage.setItem(
+                  "costSettings",
+                  JSON.stringify(backupData.costSettings)
+                );
+              }
+            }
           }
 
           alert(
@@ -216,11 +353,11 @@ const AppContent = () => {
     event.target.value = "";
   };
 
-  if (loading) {
+  if (loading || dataLoading) {
     return (
       <div className="loading-container">
         <div className="spinner"></div>
-        <p>Loading...</p>
+        <p>{loading ? "Authenticating..." : "Loading your data..."}</p>
       </div>
     );
   }
@@ -246,6 +383,12 @@ const AppContent = () => {
               <span>Welcome, {user.name}!</span>
               <button onClick={logout} className="logout-btn">
                 Logout
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                className="delete-account-btn"
+              >
+                Delete Account
               </button>
             </div>
           </div>
@@ -378,6 +521,26 @@ const AppContent = () => {
             : "This will completely wipe all your data and settings. Are you absolutely sure?\n\nThis action is IRREVERSIBLE!"
         }
       />
+
+      {/* Delete Account Modal */}
+      <Modal
+        isOpen={showDeleteAccountModal}
+        onClose={handleDeleteAccountCancel}
+        onConfirm={handleDeleteAccountConfirm}
+        type={deleteAccountStep === 1 ? "warning" : "danger"}
+        title={
+          deleteAccountStep === 1 ? "Delete Account?" : "Final Confirmation"
+        }
+        confirmText={
+          deleteAccountStep === 1 ? "Yes, Continue" : "Yes, Delete My Account"
+        }
+        cancelText={deleteAccountStep === 1 ? "Cancel" : "No, Keep Account"}
+        message={
+          deleteAccountStep === 1
+            ? "Are you sure you want to permanently delete your account?\n\nThis will permanently delete:\n• Your account and profile\n• ALL order data and analytics\n• ALL cost settings and preferences\n• ALL saved information\n\nThis action cannot be undone. Consider exporting your data first.\n\nYou will need to create a new account to use this service again."
+            : "⚠️ FINAL WARNING ⚠️\n\nYou are about to permanently delete your account and ALL associated data.\n\nThis action is IRREVERSIBLE and PERMANENT!\n\nAre you absolutely certain you want to proceed?"
+        }
+      />
     </div>
   );
 };
@@ -385,9 +548,9 @@ const AppContent = () => {
 function App() {
   return (
     <Router basename="/shopify-analytics">
-      <AuthProvider>
+      <FirebaseAuthProvider>
         <AppContent />
-      </AuthProvider>
+      </FirebaseAuthProvider>
     </Router>
   );
 }
