@@ -1,0 +1,180 @@
+.csv-upload-container {
+  margin: 2rem 0;
+}
+
+.upload-area {
+  border: 3px dashed var(--border-color);
+  border-radius: 10px;
+  padding: 3rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: var(--background-secondary);
+}
+
+.upload-area:hover,
+.upload-area.drag-active {
+  border-color: var(--primary-color, #667eea);
+  background: rgba(102, 126, 234, 0.1);
+}
+
+.upload-label {
+  cursor: pointer;
+  display: block;
+}
+
+.upload-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.upload-area h3 {
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+  font-size: 1.5rem;
+}
+
+.upload-area p {
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.file-info {
+  font-size: 0.9rem;
+  color: var(--text-secondary) !important;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.spinner {
+  border: 4px solid var(--border-color);
+  border-top: 4px solid var(--primary-color, #667eea);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.error {
+  background: var(--error-background);
+  color: var(--error-color);
+  padding: 1rem;
+  border-radius: 5px;
+  margin-top: 1rem;
+  text-align: center;
+}
+
+/* Compact Mode Styles */
+.csv-upload-container.compact {
+  margin: 0;
+}
+
+.upload-area.compact {
+  padding: 1rem;
+  border: 2px dashed var(--border-color);
+  border-radius: 8px;
+  background: var(--background-secondary);
+  transition: all 0.3s ease;
+}
+
+.upload-area.compact:hover,
+.upload-area.compact.drag-active {
+  border-color: var(--primary-color, #667eea);
+  background: rgba(102, 126, 234, 0.1);
+}
+
+.upload-area.compact .upload-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.upload-area.compact h3 {
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.upload-area.compact p {
+  font-size: 0.9rem;
+  margin-bottom: 0;
+}
+
+/* Progress Bar Styles */
+.progress-container {
+  width: 100%;
+  margin-top: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 8px;
+  background: rgba(102, 126, 234, 0.2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--primary-gradient);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  min-width: 40px;
+}
+
+/* Success Styles */
+.success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  color: var(--success-color);
+}
+
+.success-icon {
+  font-size: 3rem;
+  animation: bounce 0.5s ease;
+}
+
+.success p {
+  color: var(--success-color) !important;
+  font-weight: 600;
+  margin: 0;
+}
+
+@keyframes bounce {
+  0%,
+  20%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-10px);
+  }
+  80% {
+    transform: translateY(-5px);
+  }
+}
