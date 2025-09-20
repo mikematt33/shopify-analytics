@@ -1,4 +1,4 @@
-# Shopify Order Analytics System
+# Shopify Order Analytics System 
 
 A React web application for analyzing Shopify order data with user authentication, CSV processing, and profit calculations.
 
